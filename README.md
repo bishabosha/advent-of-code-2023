@@ -1,5 +1,5 @@
 # advent-of-code-2023
-Advent of Code challenges 2023
+Advent of Code challenges 2023, exercising an unmerged feature proposal in Scala 3 for tuples with labelled fields
 
 ## Requirements
 
