@@ -1,3 +1,5 @@
+package day01
+
 import scala.language.experimental.namedTuples
 
 import challenges.*
