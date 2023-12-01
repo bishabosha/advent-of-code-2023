@@ -31,11 +31,10 @@ val fullDigits =
     "seven", "eight", "nine"
   ) ++ digits.map(_.toString)
 
-val lookup = fullDigits.lazyZip(LazyList.continually(digits).flatten).toMap
-
-def fullMatch(line: String) = (
-  tens  = lookup(line.tails.flatMap(t => fullDigits.find(t.startsWith)).next()),
-  units = lookup(line.inits.flatMap(t => fullDigits.find(t.endsWith)).next())
-)
+def fullMatch(line: String) =
+  (
+    tens  = line.tails.map(t => fullDigits.indexWhere(t.startsWith)).filter(_ >= 0).next() % 9 + 1,
+    units = line.inits.map(t => fullDigits.indexWhere(t.endsWith)).filter(_ >= 0).next() % 9 + 1
+  )
 
 def part2(input: String): Int = solution(input, fullMatch)
