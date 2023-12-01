@@ -24,14 +24,12 @@ def solution(input: String, search: String => Digits): Int =
 
 def part1(input: String): Int = solution(input, basicMatch)
 
-val digits = 1 to 9
-
 val fullDigits =
   IArray(
     "one", "two", "three",
     "four", "five", "six",
     "seven", "eight", "nine"
-  ) ++ digits.map(_.toString)
+  ) ++ (1 to 9).map(_.toString)
 
 def fullMatch(line: String) =
   (
