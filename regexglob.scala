@@ -3,23 +3,29 @@ package regexglob
 import quoted.*
 import scala.annotation.compileTimeOnly
 
-/**
-  * example:
-  *
-  ```
-    def parseColors(pair: String): Colors =
-      val r"$value $name" = pair: @unchecked
-      (color = name, count = value.toInt)
 
-    def parse(line: String): Game =
-      val r"Game $id: ${rs"$pairss...(, )"}...(; )" = line: @unchecked
-      (game = id.toInt, hands = pairss.map(_.map(parseColors)))
-  ```
-  * @param pair
-  */
 object RegexGlobbing:
-  class RSStringContext[+R](pattern: Pattern)
-  class RSSStringContext[+R](pattern: Pattern)
+  extension (inline sc: scala.StringContext)
+
+    /** use in patterns like `case r"$foo...(, )" =>` */
+    @compileTimeOnly("should be used with `r` pattern interpolator")
+    transparent inline def r: RSStringContext[Any] = ${rsApplyExpr('sc)}
+
+  extension [R](inline rsSC: RSStringContext[R])
+    /** enables compile time splitting of string globs with the syntax `r"$foo...(, )"`.
+     * can be arbitrarily nested, e.g. `r"${r"$foos...(, )"}...(; )"`.
+     * ```
+     * case r"Foo $id: $bars...(, )" => (id, bars)
+     * ```
+     * is equivalent to
+     * ```
+     * case s"Foo $id: $bars0" => (id, bars0.split(", ").toIndexedSeq)
+     * ```
+     */
+    transparent inline def unapply[Base](scrutinee: Base): Option[Any] =
+      ${rsUnapplyExpr('rsSC, 'scrutinee)}
+
+  class RSStringContext[+Base](pattern: Pattern)
 
   enum PatternElement:
     case Glob(pattern: String)
@@ -33,8 +39,8 @@ object RegexGlobbing:
         case Split(splitOn, pattern) =>
           '{ Split(${Expr(splitOn)}, ${Expr(pattern)}) }
 
-  case class Pattern(elements: Seq[PatternElement]):
-    def unapply(scrutinee: String): Option[Any] =
+  case class PatternLive(elements: Seq[PatternElement], levels: Int):
+    private def unapply0(scrutinee: String): Option[Any] =
       def foldGlobs(acc: Seq[String], self: PatternElement): Seq[String] =
         self match
           case PatternElement.Glob(pattern) => acc :+ pattern
@@ -52,56 +58,48 @@ object RegexGlobbing:
           else
             Some(Tuple.fromArray(stage2.toArray))
 
-  case class Patterns(base: Pattern):
-    def unapply(scrutinee: Seq[String]): Option[Any] =
-      val stage1 = scrutinee.map(base.unapply)
-      if stage1.forall(_.isDefined) then
-        var state = Map.empty[Int, Any]
-        stage1.map(_.get).foreach: res =>
-          res match
-            case res: Tuple =>
-              res.productIterator.zipWithIndex.foreach:
-                case (value, index) =>
-                  value match
-                    case value: String =>
-                      val current = state.getOrElse(index, Vector.empty[String]).asInstanceOf[Vector[String]]
-                      state = state.updated(index, current :+ value)
-                    case seq: Seq[String] @unchecked =>
-                      val current = state.getOrElse(index, Vector.empty[Seq[String]]).asInstanceOf[Vector[Seq[String]]]
-                      state = state.updated(index, current :+ seq)
-            case value: String =>
-              val current = state.getOrElse(0, Vector.empty[String]).asInstanceOf[Vector[String]]
-              state = state.updated(0, current :+ value)
-            case seq: Seq[String] @unchecked =>
-              val current = state.getOrElse(0, Vector.empty[Seq[String]]).asInstanceOf[Vector[Seq[String]]]
-              state = state.updated(0, current :+ seq)
-        val stage2_0 = state.toArray.sortBy(_._1).map(_._2)
+    private def unapplyN(scrutinee: Any, level: Int): Option[Any] =
+      level match
+        case 0 => unapply0(scrutinee.asInstanceOf[String])
+        case i =>
+          val stageN1 = scrutinee.asInstanceOf[Seq[Any]].map(unapplyN(_, i - 1))
+          if stageN1.forall(_.isDefined) then
+            var state = Map.empty[Int, Any]
+            stageN1.map(_.get).foreach: res =>
+              res match
+                case res: Tuple =>
+                  res.productIterator.zipWithIndex.foreach:
+                    case (value, index) =>
+                      value match
+                        case value: String =>
+                          val current = state.getOrElse(index, Vector.empty[String]).asInstanceOf[Vector[String]]
+                          state = state.updated(index, current :+ value)
+                        case seq: Seq[String] @unchecked =>
+                          val current = state.getOrElse(index, Vector.empty[Seq[String]]).asInstanceOf[Vector[Seq[String]]]
+                          state = state.updated(index, current :+ seq)
+                case value: String =>
+                  val current = state.getOrElse(0, Vector.empty[String]).asInstanceOf[Vector[String]]
+                  state = state.updated(0, current :+ value)
+                case seq: Seq[String] @unchecked =>
+                  val current = state.getOrElse(0, Vector.empty[Seq[String]]).asInstanceOf[Vector[Seq[String]]]
+                  state = state.updated(0, current :+ seq)
+            val stage2_0 = state.toArray.sortBy(_._1).map(_._2)
 
-        if stage2_0.size == 1 then
-          Some(stage2_0.head)
-        else
-          Some(Tuple.fromArray(stage2_0))
-      else
-        None
+            if stage2_0.size == 1 then
+              Some(stage2_0.head)
+            else
+              Some(Tuple.fromArray(stage2_0))
+          else
+            None
 
+    def unapply[Base](scrutinee: Base): Option[Any] = unapplyN(scrutinee, levels)
+
+  case class Pattern(elements: Seq[PatternElement])
 
   object Pattern:
     given ToExpr[Pattern] with
       def apply(pattern: Pattern)(using Quotes): Expr[Pattern] =
         '{ Pattern(${Expr.ofSeq(pattern.elements.map(Expr(_)))}) }
-
-  extension (inline sc: scala.StringContext)
-    @compileTimeOnly("should be used with `r` interpolator")
-    transparent inline def r: RSStringContext[Any] = ${rsApplyExpr('sc)}
-    transparent inline def rs: RSSStringContext[Any] = ${rssApplyExpr('sc)}
-
-  extension [R](inline rsSC: RSStringContext[R])
-    transparent inline def unapply(scrutinee: String): Option[R] =
-      ${rsUnapplyExpr('rsSC, 'scrutinee)}
-
-  extension [R](inline rssSC: RSSStringContext[R])
-    transparent inline def unapply(scrutinee: Seq[String]): Option[R] =
-      ${rssUnapplyExpr('rssSC, 'scrutinee)}
 
   def parsed(scExpr: Expr[StringContext])(using Quotes): Pattern =
     val sc: StringContext = scExpr.valueOrAbort
@@ -135,18 +133,6 @@ object RegexGlobbing:
     else
       report.errorAndAbort(s"too many captures: ${args.size} (implementation restriction: max 22)")
 
-  def refineResult2(pattern: Pattern)(using Quotes): quotes.reflect.TypeRepr =
-    import quotes.reflect.*
-    val args = pattern.elements.drop(1).map:
-      case PatternElement.Glob(_) => TypeRepr.of[Seq[String]]
-      case PatternElement.Split(_, _) => TypeRepr.of[Seq[Seq[String]]]
-    if args.size == 1 then
-      args.head
-    else if args.size <= 22 then
-      AppliedType(defn.TupleClass(args.size).typeRef, args.toList)
-    else
-      report.errorAndAbort(s"too many captures: ${args.size} (implementation restriction: max 22)")
-
   def rsApplyExpr(rsSCExpr: Expr[StringContext])(using Quotes): Expr[RSStringContext[Any]] =
     val pattern = parsed(rsSCExpr)
     val patternExpr = Expr(pattern)
@@ -155,18 +141,47 @@ object RegexGlobbing:
       case '[t] =>
         '{ new RSStringContext[t]($patternExpr) }
 
-  def rssApplyExpr(rsSCExpr: Expr[StringContext])(using Quotes): Expr[RSSStringContext[Any]] =
-    val pattern = parsed(rsSCExpr)
-    val patternExpr = Expr(pattern)
-    val patternTypeRepr = refineResult2(pattern)
-    patternTypeRepr.asType match
-      case '[t] =>
-        '{ new RSSStringContext[t]($patternExpr) }
+  def wrapping[Base: Type](using Quotes): Int =
+    import quotes.reflect.*
+    Type.of[Base] match
+      case '[String] => 0
+      case '[Seq[t]] => wrapping[t] + 1
+      case _ => report.errorAndAbort(s"unsupported type: ${TypeRepr.of[Base]}")
 
-  def rssUnapplyExpr[R: Type](rssSCExpr: Expr[RSSStringContext[R]], scrutinee: Expr[Seq[String]])(using Quotes): Expr[Option[R]] =
-    val '{ new RSSStringContext[R]($patternExpr: Pattern) } = rssSCExpr: @unchecked
-    '{ new Patterns($patternExpr).unapply($scrutinee).asInstanceOf[Option[R]] }
+  def wrap[Elem: Type](times: Int)(using Quotes): Type[?] =
+    import quotes.reflect.*
+    times match
+      case 0 => Type.of[Elem]
+      case n =>
+        wrap[Elem](n - 1) match
+          case '[t] => Type.of[Seq[t]]
 
-  def rsUnapplyExpr[R: Type](rsSCExpr: Expr[RSStringContext[R]], scrutinee: Expr[String])(using Quotes): Expr[Option[R]] =
+  def wrapAll[R: Type](times: Int)(using Quotes): Type[?] =
+    import quotes.reflect.*
+    val args = wrapAllSub[R](times)
+    if args.size == 1 then
+      args.head
+    else if args.size <= 22 then
+      AppliedType(defn.TupleClass(args.size).typeRef, args.toList.map({ case '[t] => TypeRepr.of[t] })).asType
+    else
+      report.errorAndAbort(s"too many captures: ${args.size} (implementation restriction: max 22)")
+
+  def wrapAllSub[R: Type](times: Int)(using Quotes): List[Type[?]] =
+    import quotes.reflect.*
+    val consClass = Symbol.requiredClass("scala.*:")
+    Type.of[R] match
+      case '[t *: ts] =>
+        wrap[t](times) :: wrapAllSub[ts](times)
+      case '[EmptyTuple] => Nil
+      case '[singleton] => wrap[singleton](times) :: Nil
+      case _ => report.errorAndAbort(s"unsupported type: ${TypeRepr.of[R]}")
+
+  def rsUnapplyExpr[R: Type, Base: Type](rsSCExpr: Expr[RSStringContext[R]], scrutinee: Expr[Base])(using Quotes): Expr[Option[Any]] =
+    import quotes.reflect.*
     val '{ new RSStringContext[R]($patternExpr: Pattern) } = rsSCExpr: @unchecked
-    '{ $patternExpr.unapply($scrutinee).asInstanceOf[Option[R]] }
+    val levels = wrapping[Base]
+    val returnType = wrapAll[R](levels)
+    val levelsExpr = Expr(levels)
+    returnType match
+      case '[t] =>
+        '{ PatternLive($patternExpr.elements, levels = $levelsExpr).unapply($scrutinee).asInstanceOf[Option[t]] }

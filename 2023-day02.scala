@@ -25,7 +25,7 @@ def parseColors(pair: String): Colors =
   (color = name, count = value.toInt)
 
 def parse(line: String): Game =
-  val (r"Game $id: ${rs"$pairss...(, )"}...(; )") = line: @unchecked
+  val (r"Game $id: ${r"$pairss...(, )"}...(; )") = line: @unchecked
   val hands2 = pairss.map(_.map(parseColors))
   (game = id.toInt, hands = hands2)
 
