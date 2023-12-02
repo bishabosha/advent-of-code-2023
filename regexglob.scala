@@ -74,14 +74,14 @@ object RegexGlobbing:
                         case value: String =>
                           val current = state.getOrElse(index, Vector.empty[String]).asInstanceOf[Vector[String]]
                           state = state.updated(index, current :+ value)
-                        case seq: Seq[String] @unchecked =>
-                          val current = state.getOrElse(index, Vector.empty[Seq[String]]).asInstanceOf[Vector[Seq[String]]]
+                        case seq: Seq[elem] =>
+                          val current = state.getOrElse(index, Vector.empty[Seq[elem]]).asInstanceOf[Vector[Seq[elem]]]
                           state = state.updated(index, current :+ seq)
                 case value: String =>
                   val current = state.getOrElse(0, Vector.empty[String]).asInstanceOf[Vector[String]]
                   state = state.updated(0, current :+ value)
-                case seq: Seq[String] @unchecked =>
-                  val current = state.getOrElse(0, Vector.empty[Seq[String]]).asInstanceOf[Vector[Seq[String]]]
+                case seq: Seq[elem] =>
+                  val current = state.getOrElse(0, Vector.empty[Seq[elem]]).asInstanceOf[Vector[Seq[elem]]]
                   state = state.updated(0, current :+ seq)
             val stage2_0 = state.toArray.sortBy(_._1).map(_._2)
 
