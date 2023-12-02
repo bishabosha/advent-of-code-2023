@@ -2,6 +2,7 @@ package day02
 
 import scala.language.experimental.namedTuples
 
+import regexglob.RegexGlobbing.*
 import challenges.*
 
 @main def part1: Unit =
@@ -11,7 +12,7 @@ import challenges.*
   println(s"the answer is ${part2(inputToday())}")
 
 type Colors = (color: String, count: Int)
-type Game = (game: Int, hands: List[List[Colors]])
+type Game = (game: Int, hands: Seq[Seq[Colors]])
 type Config = Map[String, Int]
 
 def validate(config: Config, game: Game): Boolean =
@@ -20,15 +21,13 @@ def validate(config: Config, game: Game): Boolean =
       case (color, count) => config.getOrElse(color, 0) >= count
 
 def parseColors(pair: String): Colors =
-  val Array(count0, color0) = pair.split(" ")
-  (color = color0, count = count0.toInt)
+  val (r"$value $name") = pair: @unchecked
+  (color = name, count = value.toInt)
 
 def parse(line: String): Game =
-  val Array(game0, hands) = line.split(": "): @unchecked
-  val Array(_, id) = game0.split(" "): @unchecked
-  val hands0 = hands.split("; ").toList
-  val hands1 = hands0.map(_.split(", ").map(parseColors).toList)
-  (game = id.toInt, hands = hands1)
+  val (r"Game $id: ${rs"$pairss...(, )"}...(; )") = line: @unchecked
+  val hands2 = pairss.map(_.map(parseColors))
+  (game = id.toInt, hands = hands2)
 
 def part1(input: String): Int =
   val clauses = input.linesIterator.map(parse).toList
