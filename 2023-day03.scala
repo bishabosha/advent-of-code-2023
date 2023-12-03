@@ -4,7 +4,6 @@ import scala.language.experimental.namedTuples
 
 import regexglob.RegexGlobbing.*
 import challenges.*
-import javax.swing.text.html.parser.Entity
 
 @main def part1: Unit =
   println(s"the answer is ${part1(inputToday())}")
@@ -64,10 +63,9 @@ def part2(input: String): Long =
   matches.sum
 
 def parseRow(row: String): (numbers: IArray[Entity], symbols: IArray[Entity]) =
-  var it = row.iterator
-  var buf = StringBuilder()
-  var numbers = IArray.newBuilder[Entity]
-  var symbols = IArray.newBuilder[Entity]
+  val buf = StringBuilder()
+  val numbers = IArray.newBuilder[Entity]
+  val symbols = IArray.newBuilder[Entity]
   var begin = -1 // -1 = not building an entity, >= 0 = start of an entity
   var knownSymbol = -1 // trinary: -1 = unknown, 0 = number, 1 = symbol
   def addEntity(isSymbol: Boolean, x: Int, value: String) =

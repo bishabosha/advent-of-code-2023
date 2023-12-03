@@ -28,7 +28,8 @@ object RegexGlobbing:
     transparent inline def unapply[Base](scrutinee: Base): Any =
       ${rsUnapplyExpr('rsSC, 'scrutinee)}
 
-  class RSStringContext[+Base](pattern: Pattern)
+  @annotation.nowarn("msg=unused explicit parameter")
+  class RSStringContext[+Base](pattern: Pattern) // used in macro extraction
 
   enum FormatPattern:
     case AsInt
@@ -216,7 +217,6 @@ object RegexGlobbing:
         case '[t] => Type.of[Option[t]]
 
   def wrapElem[Elem: Type](times: Int)(using Quotes): Type[?] =
-    import quotes.reflect.*
     times match
       case 0 => Type.of[Elem]
       case n =>
@@ -225,7 +225,6 @@ object RegexGlobbing:
 
   def wrapElems[R: Type](times: Int)(using Quotes): List[Type[?]] =
     import quotes.reflect.*
-    val consClass = Symbol.requiredClass("scala.*:")
     Type.of[R] match
       case '[t *: ts] =>
         wrapElem[t](times) :: wrapElems[ts](times)
