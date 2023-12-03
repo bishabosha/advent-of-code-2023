@@ -2,6 +2,7 @@ package regexglob
 
 import quoted.*
 import scala.annotation.compileTimeOnly
+import ujson.Arr
 
 
 object RegexGlobbing:
@@ -22,7 +23,7 @@ object RegexGlobbing:
      * case s"Foo $id: $bars0" => (id, bars0.split(", ").toIndexedSeq)
      * ```
      */
-    transparent inline def unapply[Base](scrutinee: Base): Option[Any] =
+    transparent inline def unapply[Base](scrutinee: Base): Any =
       ${rsUnapplyExpr('rsSC, 'scrutinee)}
 
   class RSStringContext[+Base](pattern: Pattern)
@@ -40,59 +41,55 @@ object RegexGlobbing:
           '{ Split(${Expr(splitOn)}, ${Expr(pattern)}) }
 
   case class PatternLive(elements: Seq[PatternElement], levels: Int):
-    private def unapply0(scrutinee: String): Option[Any] =
+    private def unapply0(scrutinee: String, slots: Int): Option[Any] | Boolean =
       def foldGlobs(acc: Seq[String], self: PatternElement): Seq[String] =
         self match
           case PatternElement.Glob(pattern) => acc :+ pattern
           case PatternElement.Split(_, pattern) => acc :+ pattern
       val globs = elements.foldLeft(Vector.empty[String]: Seq[String])(foldGlobs)
       StringContext.glob(globs, scrutinee) match
-        case None => None
+        case None =>
+          if slots == 0 then false else None
         case Some(stage1) =>
           val stage2 = stage1.lazyZip(elements.drop(1)).map: (globbed, element) =>
             element match
               case PatternElement.Glob(_) => globbed
               case PatternElement.Split(splitOn, _) => globbed.split(splitOn).toIndexedSeq
-          if stage2.size == 1 then
+          if slots == 0 then
+            true
+          else if slots == 1 then
             Some(stage2.head)
           else
             Some(Tuple.fromArray(stage2.toArray))
 
-    private def unapplyN(scrutinee: Any, level: Int): Option[Any] =
+    private def unapplyN(scrutinee: Any, slots: Int, level: Int): Option[Any] | Boolean =
       level match
-        case 0 => unapply0(scrutinee.asInstanceOf[String])
+        case 0 => unapply0(scrutinee.asInstanceOf[String], slots)
         case i =>
-          val stageN1 = scrutinee.asInstanceOf[Seq[Any]].map(unapplyN(_, i - 1))
-          if stageN1.forall(_.isDefined) then
-            var state = Map.empty[Int, Any]
-            stageN1.map(_.get).foreach: res =>
-              res match
-                case res: Tuple =>
-                  res.productIterator.zipWithIndex.foreach:
-                    case (value, index) =>
-                      value match
-                        case value: String =>
-                          val current = state.getOrElse(index, Vector.empty[String]).asInstanceOf[Vector[String]]
-                          state = state.updated(index, current :+ value)
-                        case seq: Seq[elem] =>
-                          val current = state.getOrElse(index, Vector.empty[Seq[elem]]).asInstanceOf[Vector[Seq[elem]]]
-                          state = state.updated(index, current :+ seq)
-                case value: String =>
-                  val current = state.getOrElse(0, Vector.empty[String]).asInstanceOf[Vector[String]]
-                  state = state.updated(0, current :+ value)
-                case seq: Seq[elem] =>
-                  val current = state.getOrElse(0, Vector.empty[Seq[elem]]).asInstanceOf[Vector[Seq[elem]]]
-                  state = state.updated(0, current :+ seq)
-            val stage2_0 = state.toArray.sortBy(_._1).map(_._2)
-
-            if stage2_0.size == 1 then
-              Some(stage2_0.head)
-            else
-              Some(Tuple.fromArray(stage2_0))
+          val stageN1 = scrutinee.asInstanceOf[Seq[Any]].map(unapplyN(_, slots, i - 1))
+          if slots == 0 then
+            stageN1.asInstanceOf[Seq[Boolean]].forall(identity)
           else
-            None
+            val stageN1Refined = stageN1.asInstanceOf[Seq[Option[Any]]]
+            if stageN1Refined.forall(_.isDefined) then
+              val state = Array.fill[Vector[Any]](slots)(Vector.empty[Any])
+              stageN1Refined.foreach: res =>
+                res.get match
+                  case res: Tuple =>
+                    res.productIterator.zipWithIndex.foreach:
+                      case (value, index) =>
+                        state(index) :+= value
+                  case value =>
+                    state(0) :+= value
+              if slots == 1 then
+                Some(state(0))
+              else
+                Some(Tuple.fromArray(state))
+            else
+              None
 
-    def unapply[Base](scrutinee: Base): Option[Any] = unapplyN(scrutinee, levels)
+    def unapply[Base](scrutinee: Base): Option[Any] | Boolean =
+      unapplyN(scrutinee, slots = elements.size - 1, levels)
 
   case class Pattern(elements: Seq[PatternElement])
 
@@ -126,7 +123,9 @@ object RegexGlobbing:
     val args = pattern.elements.drop(1).map:
       case PatternElement.Glob(_) => TypeRepr.of[String]
       case PatternElement.Split(_, _) => TypeRepr.of[Seq[String]]
-    if args.size == 1 then
+    if args.size == 0 then
+      TypeRepr.of[EmptyTuple]
+    else if args.size == 1 then
       args.head
     else if args.size <= 22 then
       AppliedType(defn.TupleClass(args.size).typeRef, args.toList)
@@ -148,40 +147,46 @@ object RegexGlobbing:
       case '[Seq[t]] => wrapping[t] + 1
       case _ => report.errorAndAbort(s"unsupported type: ${TypeRepr.of[Base]}")
 
-  def wrap[Elem: Type](times: Int)(using Quotes): Type[?] =
+  def wrapResult[R: Type](times: Int)(using Quotes): Type[?] =
+    import quotes.reflect.*
+    val args = wrapElems[R](times)
+    if args.size == 0 then
+      Type.of[Boolean]
+    else
+      val res0 =
+        if args.size == 1 then
+          args.head
+        else if args.size <= 22 then
+          AppliedType(defn.TupleClass(args.size).typeRef, args.toList.map({ case '[t] => TypeRepr.of[t] })).asType
+        else
+          report.errorAndAbort(s"too many captures: ${args.size} (implementation restriction: max 22)")
+      res0 match
+        case '[t] => Type.of[Option[t]]
+
+  def wrapElem[Elem: Type](times: Int)(using Quotes): Type[?] =
     import quotes.reflect.*
     times match
       case 0 => Type.of[Elem]
       case n =>
-        wrap[Elem](n - 1) match
+        wrapElem[Elem](n - 1) match
           case '[t] => Type.of[Seq[t]]
 
-  def wrapAll[R: Type](times: Int)(using Quotes): Type[?] =
-    import quotes.reflect.*
-    val args = wrapAllSub[R](times)
-    if args.size == 1 then
-      args.head
-    else if args.size <= 22 then
-      AppliedType(defn.TupleClass(args.size).typeRef, args.toList.map({ case '[t] => TypeRepr.of[t] })).asType
-    else
-      report.errorAndAbort(s"too many captures: ${args.size} (implementation restriction: max 22)")
-
-  def wrapAllSub[R: Type](times: Int)(using Quotes): List[Type[?]] =
+  def wrapElems[R: Type](times: Int)(using Quotes): List[Type[?]] =
     import quotes.reflect.*
     val consClass = Symbol.requiredClass("scala.*:")
     Type.of[R] match
       case '[t *: ts] =>
-        wrap[t](times) :: wrapAllSub[ts](times)
+        wrapElem[t](times) :: wrapElems[ts](times)
       case '[EmptyTuple] => Nil
-      case '[singleton] => wrap[singleton](times) :: Nil
+      case '[singleton] => wrapElem[singleton](times) :: Nil
       case _ => report.errorAndAbort(s"unsupported type: ${TypeRepr.of[R]}")
 
-  def rsUnapplyExpr[R: Type, Base: Type](rsSCExpr: Expr[RSStringContext[R]], scrutinee: Expr[Base])(using Quotes): Expr[Option[Any]] =
+  def rsUnapplyExpr[R: Type, Base: Type](rsSCExpr: Expr[RSStringContext[R]], scrutinee: Expr[Base])(using Quotes): Expr[Any] =
     import quotes.reflect.*
     val '{ new RSStringContext[R]($patternExpr: Pattern) } = rsSCExpr: @unchecked
     val levels = wrapping[Base]
-    val returnType = wrapAll[R](levels)
+    val returnType = wrapResult[R](levels)
     val levelsExpr = Expr(levels)
     returnType match
       case '[t] =>
-        '{ PatternLive($patternExpr.elements, levels = $levelsExpr).unapply($scrutinee).asInstanceOf[Option[t]] }
+        '{ PatternLive($patternExpr.elements, levels = $levelsExpr).unapply($scrutinee).asInstanceOf[t] }
