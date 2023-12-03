@@ -20,13 +20,9 @@ def validate(config: Config, game: Game): Boolean =
     _.forall:
       case (color, count) => config.getOrElse(color, 0) >= count
 
-def makeColor(name: String, value: String): Colors =
-  (color = name, count = value.toInt)
-
 def parse(line: String): Game =
-  val (r"Game $id: ${r"${r"$countss $namess"}...(, )"}...(; )") = line: @unchecked
-  val hands2 = namess.lazyZip(countss).map(_.lazyZip(_).map(makeColor))
-  (game = id.toInt, hands = hands2)
+  val (r"Game $id%d: ${r"${r"$countss%d $namess"}...(, )"}...(; )") = line: @unchecked
+  (game = id, hands = namess.lazyZip(countss).map(_.zip(_)))
 
 def part1(input: String): Int =
   val clauses = input.linesIterator.map(parse).toList

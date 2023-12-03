@@ -4,6 +4,7 @@ import quoted.*
 import scala.annotation.compileTimeOnly
 import collection.immutable
 import collection.mutable
+import scala.util.boundary, boundary.break
 
 
 object RegexGlobbing:
@@ -29,9 +30,24 @@ object RegexGlobbing:
 
   class RSStringContext[+Base](pattern: Pattern)
 
+  enum FormatPattern:
+    case AsInt
+    case AsLong
+    case AsDouble
+    case AsFloat
+
+  object FormatPattern:
+    given ToExpr[FormatPattern] with
+      def apply(formatPattern: FormatPattern)(using Quotes): Expr[FormatPattern] = formatPattern match
+        case AsInt => '{ AsInt }
+        case AsLong => '{ AsLong }
+        case AsDouble => '{ AsDouble }
+        case AsFloat => '{ AsFloat }
+
   enum PatternElement:
     case Glob(pattern: String)
     case Split(splitOn: String, pattern: String)
+    case Format(format: FormatPattern, pattern: String)
 
   object PatternElement:
     given ToExpr[PatternElement] with
@@ -40,6 +56,8 @@ object RegexGlobbing:
           '{ Glob(${Expr(pattern)}) }
         case Split(splitOn, pattern) =>
           '{ Split(${Expr(splitOn)}, ${Expr(pattern)}) }
+        case Format(format, pattern) =>
+          '{ Format(${Expr(format)}, ${Expr(pattern)}) }
 
   case class PatternLive(elements: Seq[PatternElement], levels: Int):
     private class ArraySeqBuilderProduct(arr: Array[mutable.Builder[AnyRef, immutable.ArraySeq[AnyRef]]]) extends Product:
@@ -53,6 +71,7 @@ object RegexGlobbing:
         self match
           case PatternElement.Glob(pattern) => acc :+ pattern
           case PatternElement.Split(_, pattern) => acc :+ pattern
+          case PatternElement.Format(_, pattern) => acc :+ pattern
       val globs = elements.foldLeft(Vector.empty[String]: Seq[String])(foldGlobs)
       StringContext.glob(globs, scrutinee) match
         case None =>
@@ -61,15 +80,26 @@ object RegexGlobbing:
           if slots == 0 then
             true
           else
-            def process(globbed: String, self: PatternElement): String | Seq[String] = self match
+            def process(globbed: String, self: PatternElement): String | Seq[String] | Option[Any] = self match
               case PatternElement.Glob(_) => globbed
               case PatternElement.Split(splitOn, _) => globbed.split(splitOn).toIndexedSeq
+              case PatternElement.Format(format, _) =>
+                format match
+                  case FormatPattern.AsInt => globbed.toIntOption
+                  case FormatPattern.AsLong => globbed.toLongOption
+                  case FormatPattern.AsDouble => globbed.toDoubleOption
+                  case FormatPattern.AsFloat => globbed.toFloatOption
             if slots == 1 then
-              Some(process(stage1.head, elements.last))
-            else
+              process(stage1.head, elements.last) match
+                case opt: Option[Any] => opt // from format
+                case other => Some(other)
+            else boundary:
               val state = new Array[AnyRef](slots)
-              stage1.lazyZip(elements.drop(1)).lazyZip(0 until slots).foreach: (globbed, element, index) =>
-                state(index) = process(globbed, element)
+                stage1.lazyZip(elements.drop(1)).lazyZip(0 until slots).foreach: (globbed, element, index) =>
+                  process(globbed, element) match
+                    case None => break(None) // format failed
+                    case Some(value) => state(index) = value.asInstanceOf[AnyRef] // format succeeded
+                    case value => state(index) = value.asInstanceOf[AnyRef] // no format
               Some(Tuple.fromArray(state))
 
     private def unapplyN(scrutinee: Any, slots: Int, level: Int): Option[Any] | Boolean =
@@ -113,6 +143,8 @@ object RegexGlobbing:
     g match
       case s"...($regex)$rest0" =>
         quotes.reflect.report.errorAndAbort(s"split is not allowed without preceding splice: $g")
+      case s"%$format" =>
+        quotes.reflect.report.errorAndAbort(s"format `%$format` is not allowed without preceding splice: $g")
       case _ =>
 
     val rest0 = rest.map:
@@ -122,6 +154,12 @@ object RegexGlobbing:
         PatternElement.Split(regex, rest)
       case s"...$rest" =>
         quotes.reflect.report.errorAndAbort(s"split `$$foo...` is not allowed without qualifying regex e.g. `$$foo...(: )`: $rest")
+      case s"%$format" => format.headOption match
+        case Some('d') => PatternElement.Format(FormatPattern.AsInt, format.tail)
+        case Some('L') => PatternElement.Format(FormatPattern.AsLong, format.tail)
+        case Some('f') => PatternElement.Format(FormatPattern.AsFloat, format.tail)
+        case Some('g') => PatternElement.Format(FormatPattern.AsDouble, format.tail)
+        case _ => quotes.reflect.report.errorAndAbort(s"unsupported format: `%$format`")
       case rest =>
         PatternElement.Glob(rest)
     Pattern(PatternElement.Glob(g) +: rest0)
@@ -131,6 +169,12 @@ object RegexGlobbing:
     val args = pattern.elements.drop(1).map:
       case PatternElement.Glob(_) => TypeRepr.of[String]
       case PatternElement.Split(_, _) => TypeRepr.of[Seq[String]]
+      case PatternElement.Format(format, _) =>
+        format match
+          case FormatPattern.AsInt => TypeRepr.of[Int]
+          case FormatPattern.AsLong => TypeRepr.of[Long]
+          case FormatPattern.AsDouble => TypeRepr.of[Double]
+          case FormatPattern.AsFloat => TypeRepr.of[Float]
     if args.size == 0 then
       TypeRepr.of[EmptyTuple]
     else if args.size == 1 then
