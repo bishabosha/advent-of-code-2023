@@ -8,7 +8,9 @@ extension (c: Challenge) def show: String =
   val d = if c.day < 10 then s"0${c.day}" else c.day.toString
   s"${c.year}-day$d"
 
-inline def inputToday() = os.read(os.pwd / "inputs" / s"${today.show}")
+inline def inputToday(suffix: String = "") =
+  val name = if suffix.nonEmpty then s"${today.show}-$suffix" else today.show
+  os.read(os.pwd / "inputs" / name)
 
 inline def today: Challenge =
   sourcecode.FileName() match
