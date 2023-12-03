@@ -51,14 +51,13 @@ def part2(input: String): Long =
     for
       (symbols, y) <- grid.symbols.iterator.zipWithIndex
       symbol <- symbols
+      if symbol.value == "*"
     yield
-      if symbol.value != "*" then 0
+      val combined = surrounds(y, symbol, grid.numbers)
+      if combined.sizeIs == 2 then
+        combined.toList.map(_.value.toInt).product
       else
-        val combined = surrounds(y, symbol, grid.numbers)
-        if combined.sizeIs == 2 then
-          combined.toList.map(_.value.toInt).product
-        else
-          0
+        0
     end for
   matches.sum
 
