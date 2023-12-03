@@ -17,20 +17,20 @@ type Grid = (numbers: IArray[IArray[Entity]], symbols: IArray[IArray[Entity]])
 def parse(input: String): Grid =
   IArray.from(input.linesIterator.map(parseRow(_).dropNames)).unzip
 
-def surrounds(y: Int, from: Entity, rows: IArray[IArray[Entity]]): Set[Entity] =
+def surrounds(y: Int, from: Entity, rows: IArray[IArray[Entity]]): List[Entity] =
   val boundingBox = (x = from.x - 1, y = y - 1, w = from.x + from.value.size, h = y + 1)
   val width = boundingBox.x to boundingBox.w
   def overlaps(e: Entity) =
     val eWidth = e.x to (e.x + e.value.size - 1)
     width.min <= eWidth.max && width.max >= eWidth.min
   def findUp =
-    if boundingBox.y < 0 then Set.empty
-    else rows(boundingBox.y).filter(overlaps).toSet
+    if boundingBox.y < 0 then Nil
+    else rows(boundingBox.y).filter(overlaps).toList
   def findMiddle =
-    rows(y).filter(overlaps).toSet
+    rows(y).filter(overlaps).toList
   def findDown =
-    if boundingBox.h >= rows.size then Set.empty
-    else rows(boundingBox.h).filter(overlaps).toSet
+    if boundingBox.h >= rows.size then Nil
+    else rows(boundingBox.h).filter(overlaps).toList
   findUp ++ findMiddle ++ findDown
 
 def part1(input: String): Long =
@@ -55,7 +55,7 @@ def part2(input: String): Long =
     yield
       val combined = surrounds(y, symbol, grid.numbers)
       if combined.sizeIs == 2 then
-        combined.toList.map(_.value.toInt).product
+        combined.map(_.value.toInt).product
       else
         0
     end for
