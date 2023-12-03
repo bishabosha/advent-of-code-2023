@@ -2,7 +2,8 @@ package regexglob
 
 import quoted.*
 import scala.annotation.compileTimeOnly
-import ujson.Arr
+import collection.immutable
+import collection.mutable
 
 
 object RegexGlobbing:
@@ -41,6 +42,12 @@ object RegexGlobbing:
           '{ Split(${Expr(splitOn)}, ${Expr(pattern)}) }
 
   case class PatternLive(elements: Seq[PatternElement], levels: Int):
+    private class ArraySeqBuilderProduct(arr: Array[mutable.Builder[AnyRef, immutable.ArraySeq[AnyRef]]]) extends Product:
+      def canEqual(that: Any): Boolean = true
+      def productArity: Int = arr.length
+      def productElement(n: Int): Any = arr(n).result()
+      override def toString: String = arr.mkString("ArraySeqBuilderProduct(...)")
+
     private def unapply0(scrutinee: String, slots: Int): Option[Any] | Boolean =
       def foldGlobs(acc: Seq[String], self: PatternElement): Seq[String] =
         self match
@@ -51,16 +58,19 @@ object RegexGlobbing:
         case None =>
           if slots == 0 then false else None
         case Some(stage1) =>
-          val stage2 = stage1.lazyZip(elements.drop(1)).map: (globbed, element) =>
-            element match
-              case PatternElement.Glob(_) => globbed
-              case PatternElement.Split(splitOn, _) => globbed.split(splitOn).toIndexedSeq
           if slots == 0 then
             true
-          else if slots == 1 then
-            Some(stage2.head)
           else
-            Some(Tuple.fromArray(stage2.toArray))
+            def process(globbed: String, self: PatternElement): String | Seq[String] = self match
+              case PatternElement.Glob(_) => globbed
+              case PatternElement.Split(splitOn, _) => globbed.split(splitOn).toIndexedSeq
+            if slots == 1 then
+              Some(process(stage1.head, elements.last))
+            else
+              val state = new Array[AnyRef](slots)
+              stage1.lazyZip(elements.drop(1)).lazyZip(0 until slots).foreach: (globbed, element, index) =>
+                state(index) = process(globbed, element)
+              Some(Tuple.fromArray(state))
 
     private def unapplyN(scrutinee: Any, slots: Int, level: Int): Option[Any] | Boolean =
       level match
@@ -72,19 +82,17 @@ object RegexGlobbing:
           else
             val stageN1Refined = stageN1.asInstanceOf[Seq[Option[Any]]]
             if stageN1Refined.forall(_.isDefined) then
-              val state = Array.fill[Vector[Any]](slots)(Vector.empty[Any])
-              stageN1Refined.foreach: res =>
-                res.get match
-                  case res: Tuple =>
-                    res.productIterator.zipWithIndex.foreach:
-                      case (value, index) =>
-                        state(index) :+= value
-                  case value =>
-                    state(0) :+= value
               if slots == 1 then
-                Some(state(0))
+                Some(stageN1Refined.map(_.get))
               else
-                Some(Tuple.fromArray(state))
+                val state = Array.fill(slots)(immutable.ArraySeq.newBuilder[AnyRef])
+                stageN1Refined.foreach: res =>
+                  val tup = res.get.asInstanceOf[Tuple]
+                  var idx = 0
+                  while idx < slots do
+                    state(idx) += tup.productElement(idx).asInstanceOf[AnyRef]
+                    idx += 1
+                Some(Tuple.fromProduct(new ArraySeqBuilderProduct(state)))
             else
               None
 
