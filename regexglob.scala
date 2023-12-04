@@ -5,6 +5,7 @@ import scala.annotation.compileTimeOnly
 import collection.immutable
 import collection.mutable
 import scala.util.boundary, boundary.break
+import scala.collection.immutable.ArraySeq
 
 
 object RegexGlobbing:
@@ -48,6 +49,7 @@ object RegexGlobbing:
   enum PatternElement:
     case Glob(pattern: String)
     case Split(splitOn: String, pattern: String)
+    case SplitEmpty(splitOn: String, pattern: String)
     case Format(format: FormatPattern, pattern: String)
 
   object PatternElement:
@@ -57,6 +59,8 @@ object RegexGlobbing:
           '{ Glob(${Expr(pattern)}) }
         case Split(splitOn, pattern) =>
           '{ Split(${Expr(splitOn)}, ${Expr(pattern)}) }
+        case SplitEmpty(splitOn, pattern) =>
+          '{ SplitEmpty(${Expr(splitOn)}, ${Expr(pattern)}) }
         case Format(format, pattern) =>
           '{ Format(${Expr(format)}, ${Expr(pattern)}) }
 
@@ -72,6 +76,7 @@ object RegexGlobbing:
         self match
           case PatternElement.Glob(pattern) => acc :+ pattern
           case PatternElement.Split(_, pattern) => acc :+ pattern
+          case PatternElement.SplitEmpty(splitOn, pattern) => acc :+ pattern
           case PatternElement.Format(_, pattern) => acc :+ pattern
       val globs = elements.foldLeft(Vector.empty[String]: Seq[String])(foldGlobs)
       StringContext.glob(globs, scrutinee) match
@@ -84,6 +89,11 @@ object RegexGlobbing:
             def process(globbed: String, self: PatternElement): String | Seq[String] | Option[Any] = self match
               case PatternElement.Glob(_) => globbed
               case PatternElement.Split(splitOn, _) => globbed.split(splitOn).toIndexedSeq
+              case PatternElement.SplitEmpty(splitOn, _) =>
+                val res0 = globbed.split(splitOn)
+                if res0.isEmpty then ArraySeq.empty[String]
+                else if res0(0).isEmpty then res0.tail.toIndexedSeq
+                else res0.toIndexedSeq
               case PatternElement.Format(format, _) =>
                 format match
                   case FormatPattern.AsInt => globbed.toIntOption
@@ -144,6 +154,8 @@ object RegexGlobbing:
     g match
       case s"...($regex)$rest0" =>
         quotes.reflect.report.errorAndAbort(s"split is not allowed without preceding splice: $g")
+      case s"...!($regex)$rest0" =>
+        quotes.reflect.report.errorAndAbort(s"split is not allowed without preceding splice: $g")
       case s"%$format" =>
         quotes.reflect.report.errorAndAbort(s"format `%$format` is not allowed without preceding splice: $g")
       case _ =>
@@ -153,6 +165,10 @@ object RegexGlobbing:
         if rest.indexOf("...") > 0 then
           quotes.reflect.report.errorAndAbort(s"split is not allowed without preceding splice: $rest")
         PatternElement.Split(regex, rest)
+      case s"...!($regex)$rest" =>
+        if rest.indexOf("...") > 0 then
+          quotes.reflect.report.errorAndAbort(s"split is not allowed without preceding splice: $rest")
+        PatternElement.SplitEmpty(regex, rest)
       case s"...$rest" =>
         quotes.reflect.report.errorAndAbort(s"split `$$foo...` is not allowed without qualifying regex e.g. `$$foo...(: )`: $rest")
       case s"%$format" => format.headOption match
@@ -170,6 +186,7 @@ object RegexGlobbing:
     val args = pattern.elements.drop(1).map:
       case PatternElement.Glob(_) => TypeRepr.of[String]
       case PatternElement.Split(_, _) => TypeRepr.of[Seq[String]]
+      case PatternElement.SplitEmpty(_, _) => TypeRepr.of[Seq[String]]
       case PatternElement.Format(format, _) =>
         format match
           case FormatPattern.AsInt => TypeRepr.of[Int]
