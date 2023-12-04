@@ -154,7 +154,7 @@ object RegexGlobbing:
     g match
       case s"...($regex)$rest0" =>
         quotes.reflect.report.errorAndAbort(s"split is not allowed without preceding splice: $g")
-      case s"...!($regex)$rest0" =>
+      case s"..!($regex)$rest0" =>
         quotes.reflect.report.errorAndAbort(s"split is not allowed without preceding splice: $g")
       case s"%$format" =>
         quotes.reflect.report.errorAndAbort(s"format `%$format` is not allowed without preceding splice: $g")
@@ -162,15 +162,17 @@ object RegexGlobbing:
 
     val rest0 = rest.map:
       case s"...($regex)$rest" =>
-        if rest.indexOf("...") > 0 then
+        if rest.indexOf("...") > 0 || rest.indexOf("..!") > 0 then
           quotes.reflect.report.errorAndAbort(s"split is not allowed without preceding splice: $rest")
         PatternElement.Split(regex, rest)
-      case s"...!($regex)$rest" =>
-        if rest.indexOf("...") > 0 then
+      case s"..!($regex)$rest" =>
+        if rest.indexOf("...") > 0 || rest.indexOf("..!") > 0 then
           quotes.reflect.report.errorAndAbort(s"split is not allowed without preceding splice: $rest")
         PatternElement.SplitEmpty(regex, rest)
       case s"...$rest" =>
         quotes.reflect.report.errorAndAbort(s"split `$$foo...` is not allowed without qualifying regex e.g. `$$foo...(: )`: $rest")
+      case s"..!$rest" =>
+        quotes.reflect.report.errorAndAbort(s"split `$$foo..!` is not allowed without qualifying regex e.g. `$$foo..!(: )`: $rest")
       case s"%$format" => format.headOption match
         case Some('d') => PatternElement.Format(FormatPattern.AsInt, format.tail)
         case Some('L') => PatternElement.Format(FormatPattern.AsLong, format.tail)
