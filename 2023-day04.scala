@@ -14,7 +14,7 @@ import challenges.*
 type Card = (id: Int, wins: Int)
 
 def parse(card: String): Card =
-  val (r"Card ${Seq(r"$id%d")}...!(\\s+): ${r"$winning%d"}...!(\\s+) | ${r"$mine%d"}...!(\\s+)") = card: @unchecked
+  val (r"Card ${Seq(r"$id%d")}..!(\\s+): ${r"$winning%d"}..!(\\s+) | ${r"$mine%d"}..!(\\s+)") = card: @unchecked
   (id = id, wins = (winning.toSet `intersect` mine.toSet).size)
 
 def part1(input: String): Int = input.linesIterator.map(parse andThen score).sum.toInt
