@@ -2,15 +2,8 @@ package day04
 
 import scala.language.experimental.namedTuples
 
-import regexglob.RegexGlobbing.*
-import challenges.*
+import regexglob.RegexGlobbing.r
 import java.lang.Math.{pow, floor}
-
-@main def part1: Unit =
-  println(s"the answer is ${part1(inputToday())}")
-
-@main def part2: Unit =
-  println(s"the answer is ${part2(inputToday())}")
 
 type Card = (id: Int, wins: Int)
 
@@ -32,3 +25,11 @@ def addCopies(state: Map[Int, Int], card: Card): Map[Int, Int] =
 
 def part2(input: String): Int =
   input.linesIterator.map(parse).foldLeft(Map.empty)(addCopies).values.sum
+
+import challenges.*
+
+@main def part1: Unit =
+  println(s"the answer is ${part1(inputToday())}")
+
+@main def part2: Unit =
+  println(s"the answer is ${part2(inputToday())}")

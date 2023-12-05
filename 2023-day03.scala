@@ -2,15 +2,6 @@ package day03
 
 import scala.language.experimental.namedTuples
 
-import regexglob.RegexGlobbing.*
-import challenges.*
-
-@main def part1: Unit =
-  println(s"the answer is ${part1(inputToday())}")
-
-@main def part2: Unit =
-  println(s"the answer is ${part2(inputToday())}")
-
 type Entity = (x: Int, value: String)
 type Grid = (numbers: IArray[IArray[Entity]], symbols: IArray[IArray[Entity]])
 
@@ -97,3 +88,11 @@ def parseRow(row: String): (numbers: IArray[Entity], symbols: IArray[Entity]) =
   if begin >= 0 then // end of line
     addEntity(isSymbol = knownSymbol == 1, x = begin, value = buf.toString)
   (numbers = numbers.result(), symbols = symbols.result())
+
+import challenges.*
+
+@main def part1: Unit =
+  println(s"the answer is ${part1(inputToday())}")
+
+@main def part2: Unit =
+  println(s"the answer is ${part2(inputToday())}")

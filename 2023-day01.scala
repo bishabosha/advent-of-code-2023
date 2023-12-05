@@ -2,14 +2,6 @@ package day01
 
 import scala.language.experimental.namedTuples
 
-import challenges.*
-
-@main def part1: Unit =
-  println(s"the answer is ${part1(inputToday())}")
-
-@main def part2: Unit =
-  println(s"the answer is ${part2(inputToday())}")
-
 type Digits = (tens: Int, units: Int)
 
 extension (ds: Digits) def toInt = ds.tens * 10 + ds.units
@@ -38,3 +30,11 @@ def fullMatch(line: String) =
   )
 
 def part2(input: String): Int = solution(input, fullMatch)
+
+import challenges.*
+
+@main def part1: Unit =
+  println(s"the answer is ${part1(inputToday())}")
+
+@main def part2: Unit =
+  println(s"the answer is ${part2(inputToday())}")
