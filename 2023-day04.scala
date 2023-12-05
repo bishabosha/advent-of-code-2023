@@ -4,6 +4,7 @@ import scala.language.experimental.namedTuples
 
 import regexglob.RegexGlobbing.*
 import challenges.*
+import java.lang.Math.{pow, floor}
 
 @main def part1: Unit =
   println(s"the answer is ${part1(inputToday())}")
@@ -17,16 +18,15 @@ def parse(card: String): Card =
   val (r"Card ${Seq(r"$id%d")}..!(\\s+): ${r"$winning%d"}..!(\\s+) | ${r"$mine%d"}..!(\\s+)") = card: @unchecked
   (id = id, wins = (winning.toSet `intersect` mine.toSet).size)
 
-def part1(input: String): Int = input.linesIterator.map(parse andThen score).sum.toInt
+def part1(input: String): Int = input.linesIterator.map(parse andThen score).sum
 
-def score(card: Card): Int =
-  math.floor(math.pow(2, card.wins - 1)).toInt
+def score(card: Card): Int = floor(pow(2, card.wins - 1)).toInt
 
 def addCopies(state: Map[Int, Int], card: Card): Map[Int, Int] =
   val currentCopies = state.getOrElse(card.id, 0) + 1
   val state0 = state + (card.id -> currentCopies)
-  (card.id to card.id + card.wins).tail.foldLeft(state0): (state0, id) =>
-    state0.updatedWith(id):
+  (0 to card.wins).tail.foldLeft(state0): (state0, id) =>
+    state0.updatedWith(id + card.id):
       case Some(count) => Some(count + currentCopies)
       case None => Some(currentCopies)
 
