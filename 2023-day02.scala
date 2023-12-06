@@ -2,14 +2,7 @@ package day02
 
 import scala.language.experimental.namedTuples
 
-import regexglob.RegexGlobbing.*
-import challenges.*
-
-@main def part1: Unit =
-  println(s"the answer is ${part1(inputToday())}")
-
-@main def part2: Unit =
-  println(s"the answer is ${part2(inputToday())}")
+import regexglob.RegexGlobbing.r
 
 type Colors = (color: String, count: Int)
 type Game = (game: Int, hands: Seq[Seq[Colors]])
@@ -45,3 +38,11 @@ def part2(input: String): Int =
     maximums.values.product
 
   clauses.map(minCubes).sum
+
+import challenges.*
+
+@main def part1: Unit =
+  println(s"the answer is ${part1(inputToday())}")
+
+@main def part2: Unit =
+  println(s"the answer is ${part2(inputToday())}")
