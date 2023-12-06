@@ -32,7 +32,7 @@ def part2(input: String): Long =
 
   val race = (time = mixDigits(times), distance = mixDigits(distances))
 
-  // root1 < (t +- sqrt(t^2 - 4d)) / 2 > root2
+  // root1 < (t +- sqrt(t^2 - 4d)) / 2 < root2
   def solve(race: Race) =
     val top = math.sqrt(race.time * race.time - 4 * race.distance)
     val root1 = race.time - top / 2
