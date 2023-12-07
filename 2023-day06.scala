@@ -7,7 +7,7 @@ import regexglob.RegexGlobbing.r
 type Race = (time: Long, distance: Long)
 
 def part1(input: String): Long =
-  val r"Time:${r"$times%L"}..!(\\s+)Distance:${r"$distances%L"}..!(\\s+)" = input.trim(): @unchecked
+  val r"Time:${r"$times%L"}..!(\\s+)Distance:${r"$distances%L"}..!(\\s+)" = input: @unchecked
   // x * (t - x) > d
   // (x * t) - x^2 > d
   // x^2 - (t * x) + d < 0
@@ -23,7 +23,7 @@ def part1(input: String): Long =
 end part1
 
 def part2(input: String): Long =
-  val r"Time:${r"$times"}..!(\\s+)Distance:${r"$distances"}..!(\\s+)" = input.trim(): @unchecked
+  val r"Time:${r"$times"}..!(\\s+)Distance:${r"$distances"}..!(\\s+)" = input: @unchecked
 
   def mixDigits(digitss: Seq[String]) =
     digitss.foldLeft(0L): (acc, digits) =>
