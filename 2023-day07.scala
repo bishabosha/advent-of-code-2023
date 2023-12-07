@@ -6,7 +6,7 @@ import regexglob.RegexGlobbing.r
 import scala.math.Ordering.Implicits.*
 
 enum Card:
-  case A, K, Q, J, T, R9, R8, R7, R6, R5, R4, R3, R2
+  case A, K, Q, J, T, `9`, `8`, `7`, `6`, `5`, `4`, `3`, `2`
 
 object Card:
   def unapply(card: Char): Option[Card] =
@@ -57,11 +57,11 @@ def orderHands(grouping: HandGrouping)(using Ordering[Card]): Ordering[Hand] =
       scoreX.compare(scoreY)
 
 object BasicOrderings:
-  given Ordering[Card] = Ordering.by(0 - _.ordinal)
+  given Ordering[Card] = Ordering.by((_: Card).ordinal).reverse
 
 object WithJokerOrderings:
-  def rank(c: Card) = if c == Card.J then Int.MinValue else 0 - c.ordinal
-  given Ordering[Card] = Ordering.by(rank)
+  def rank(c: Card) = if c == Card.J then 1000 else c.ordinal
+  given Ordering[Card] = Ordering.by(rank).reverse
 
 def solution(input: String, grouping: HandGrouping)(using Ordering[Card]): Long =
   given Ordering[Hand] = orderHands(grouping)
