@@ -13,19 +13,18 @@ def parse(input: String): Network =
   (path = LazyList.continually(lr).flatten, nodes = nodes)
 
 def search(starts: Seq[String], isEnd: Filter, network: Network): Seq[Int] =
-  val state = starts.map(_ -> (steps = 0, done = false)).toMap
-  val states = LazyList.unfold((network.path, state)):
-    (next, state) =>
-      if state.values.forall(_.done) then None
-      else
-        val state0 = state.map: (key, path) =>
-          if !path.done then
-            val node = network.nodes(key)
-            val key0 = if next.head == 'L' then node.left else node.right
-            key0 -> (steps = path.steps + 1, done = isEnd(key0))
-          else key -> path
-        Some(state0 -> (next.tail, state0))
-  states.last.values.map(_.steps).toSeq
+  val initial = (network.path, starts.map(_ -> 0).toMap)
+  val states = LazyList.unfold(initial): (path, state) =>
+    if state.keys.forall(isEnd) then None
+    else
+      val next = state.map: (key, steps) =>
+        if isEnd(key) then key -> steps
+        else
+          val node = network.nodes(key)
+          val key0 = if path.head == 'L' then node.left else node.right
+          key0 -> (steps + 1)
+      Some(next -> (path.tail, next))
+  states.last.values.toSeq
 
 def lcm(ns: Iterable[Int]): BigInt =
   ns.foldLeft(BigInt(1)): (acc, n) =>
