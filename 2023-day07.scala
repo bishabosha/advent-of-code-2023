@@ -78,7 +78,6 @@ def part2(input: String): Long =
   import WithJokerOrderings.given
   solution(input, groupWithJoker)
 
-
 import challenges.*
 
 @main def part1: Unit =

@@ -92,7 +92,7 @@ object RegexGlobbing:
               case PatternElement.SplitEmpty(splitOn, _) =>
                 val res0 = globbed.split(splitOn)
                 if res0.isEmpty then ArraySeq.empty[String]
-                else if res0(0).isEmpty then res0.tail.toIndexedSeq
+                else if res0(0).isEmpty then res0.toIndexedSeq.tail
                 else res0.toIndexedSeq
               case PatternElement.Format(format, _) =>
                 format match
@@ -187,8 +187,8 @@ object RegexGlobbing:
     import quotes.reflect.*
     val args = pattern.elements.drop(1).map:
       case PatternElement.Glob(_) => TypeRepr.of[String]
-      case PatternElement.Split(_, _) => TypeRepr.of[Seq[String]]
-      case PatternElement.SplitEmpty(_, _) => TypeRepr.of[Seq[String]]
+      case PatternElement.Split(_, _) => TypeRepr.of[IndexedSeq[String]]
+      case PatternElement.SplitEmpty(_, _) => TypeRepr.of[IndexedSeq[String]]
       case PatternElement.Format(format, _) =>
         format match
           case FormatPattern.AsInt => TypeRepr.of[Int]
@@ -216,7 +216,7 @@ object RegexGlobbing:
     import quotes.reflect.*
     Type.of[Base] match
       case '[String] => 0
-      case '[Seq[t]] => wrapping[t] + 1
+      case '[IndexedSeq[t]] => wrapping[t] + 1
       case _ => report.errorAndAbort(s"unsupported type: ${TypeRepr.of[Base]}")
 
   def wrapResult[R: Type](times: Int)(using Quotes): Type[?] =
@@ -240,7 +240,7 @@ object RegexGlobbing:
       case 0 => Type.of[Elem]
       case n =>
         wrapElem[Elem](n - 1) match
-          case '[t] => Type.of[Seq[t]]
+          case '[t] => Type.of[IndexedSeq[t]]
 
   def wrapElems[R: Type](times: Int)(using Quotes): List[Type[?]] =
     import quotes.reflect.*
