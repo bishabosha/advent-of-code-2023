@@ -10,7 +10,7 @@ def parse(line: String): Nums =
   is
 
 def diffs(is: Nums): Nums =
-  is.sliding(2).map { case Seq(a, b) => b - a }.toSeq
+  is.lazyZip(is.tail).map((a, b) => b - a)
 
 def nextValue(ns: Nums, pick: Nums => Num, combine: (Num, Num) => Num): Num =
   val sub = diffs(ns)
