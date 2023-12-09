@@ -6,10 +6,10 @@ import regexglob.RegexGlobbing.r
 
 type Resource = (start: Long, len: Long)
 type Lookup = (dest: Long, src: Long, len: Long)
-type RangeMap = (lookups: Seq[Lookup])
+type RangeMap = (lookups: IndexedSeq[Lookup])
 type Division = (committed: List[Resource], explore: Option[Resource])
 
-def parseSingle(input: String): (seeds: Seq[Long], maps: Seq[RangeMap]) =
+def parseSingle(input: String): (seeds: Seq[Long], maps: IndexedSeq[RangeMap]) =
   val r"seeds: ${r"$seeds%L"}...( )\n\n$rows...(\n\n)" = input: @unchecked
   val r"$_ map:\n${r"$destss%L $srcss%L $lenss%L"}...(\n)" = rows: @unchecked
   val maps = destss.lazyZip(srcss).lazyZip(lenss).map: (dests, srcs, lens) =>
