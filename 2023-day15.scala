@@ -4,9 +4,7 @@ import scala.language.experimental.namedTuples
 
 import regexglob.RegexGlobbing.*
 
-// import collection.mutable.ArrayDeque
 import collection.immutable.ListMap
-import compiletime.ops.int.S
 import scala.reflect.ClassTag
 
 type Box = ListMap[String, Int]
