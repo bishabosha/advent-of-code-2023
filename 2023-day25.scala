@@ -3,6 +3,7 @@ package day25
 import scala.language.experimental.namedTuples
 
 import regexglob.RegexGlobbing.*
+import scala.collection.immutable.BitSet
 
 def parse(input: String): AList =
   val r"${r"$keys: $conss...( )"}...(\n)" = input: @unchecked
@@ -19,34 +20,43 @@ def groups(list: AList, acc: Seq[Set[String]]): Seq[Set[String]] =
     groups(rest, acc1 :+ merged)
   case _ => acc
 
-case class Vertex(id: String, nodes: Set[String]):
+case class Edge(v: Id, w: Id):
+  def swap: Edge = copy(v = w, w = v)
+
+case class Vertex(id: Id, nodes: Set[String]):
 
   def ++ (that: Vertex): Vertex = copy(nodes = nodes ++ that.nodes)
 
-  override def hashCode(): Int = id.hashCode()
+  override def hashCode(): Int = id
   override def equals(that: Any): Boolean = that match
     case that: Vertex => id == that.id
     case _ => false
 
 // type Vertex = (nodes: Set[String])
-type Edge = (Vertex, Vertex)
+// type Edge = (Vertex, Vertex)
 type Cut = Set[Edge]
 extension (cut: Cut)
   def weight: Int = cut.size
 type Weight = Map[Edge, Long]
+type Vertices = BitSet
+type Id = Int
 
 def readGraph(alist: AList): (Graph, Weight) =
+  var id = 1
+  val seen = collection.mutable.Map.empty[String, Int]
+  def idOf(v: String) = seen.getOrElseUpdate(v, { id += 1; id })
+
   def asVertex(v: String) = v match
-    case s"$n@$_" => Vertex(id = n, nodes = Set(n))
-    case n => Vertex(id = n, nodes = Set(n))
+    case s"$n@$_" => Vertex(id = idOf(n), nodes = Set(n))
+    case n => Vertex(id = idOf(n), nodes = Set(n))
   def asWeight(v: String) = v match
     case s"$_@$w" => w.toLong
     case n => 1L
   def asEdges(k: String, v: String) =
-    val t = (asVertex(k), asVertex(v))
+    val t = Edge(idOf(k), idOf(v)) //(asVertex(k), asVertex(v))
     List(t, t.swap)
   def asWeights(k: String, v: String) =
-    val t = (asVertex(k), asVertex(v))
+    val t = Edge(idOf(k), idOf(v)) //(asVertex(k), asVertex(v))
     val w = asWeight(v)
     List(t -> w, t.swap -> w)
 
@@ -56,105 +66,100 @@ def readGraph(alist: AList): (Graph, Weight) =
   Graph(vertices, edges) -> weights
 
 case class Graph(V: Set[Vertex], E: Set[Edge]):
-  def mostTightlyConnectedVertex(A: Set[Vertex], U: Set[Vertex], m: Set[Edge], w: Weight): Vertex =
-    // U = V diff A
-    val candidateEdges = m.filter((_, y) => U(y)).groupBy((_, y) => y) //E.filter((a, y) => A(a) && U(y)).groupBy((_, y) => y)
-    val candidate = U.maxBy(y =>
-      // edges from A to y
-      val edges = candidateEdges.getOrElse(y, Set.empty)
-      // sum of weights
-      cutWeight(edges, w)
-    )
-    // val edges = E.filter((a, z) => z == candidate && A(a))
-    // val weight = edges.toSeq.map(w(_)).sum
-    // println(s"adding z = ${candidate.show}@$weight, from: ${edges.show(using w)}, A: ${A.show}")
-    candidate
+  val v = V.map(_.id).to(BitSet)
+  val vs = V.map(v => v.id -> v).toMap
+  def nodes(id: Id) = vs(id).nodes
 
-  def cutWeight(cut: Cut, w: Weight): Long =
-    cut.foldLeft(0L)(_ + w(_))
+  def cutOfThePhase(t: Id): (graph: Graph, cut: Cut, out: Set[String], in: Set[String]) =
+    (graph = this, cut = E.filter({case Edge(t1, y) => t1 == t && v(y)}), out = nodes(t), in = (v - t).flatMap(nodes))
 
-  def cutOfThePhase(t: Vertex): (cut: Cut, out: Set[String], in: Set[String]) =
-    (cut = E.filter((t1, y) => t1 == t && V(y)), out = t.nodes, in = (V - t).flatMap(_.nodes))
-
-  def shrinkGraph(s: Vertex, t: Vertex, w: Weight): (Graph, Weight) =
+  def shrinkGraph(s: Id, t: Id, w: Weight): (Graph, Weight) =
     // println(s"added(n)=t:${t.show}, added(n-1)=s:${s.show}")
-    val V1 = V - s - t
+    val v1 = v - s - t
 
     val (mergeable, replaceable) =
-      val candidates: Set[Edge] = E.filter((st1, y) =>
+      val candidates: Set[Edge] = E.filter({case Edge(st1, y) =>
         y != s && y != t && (st1 == s || st1 == t)
-      )
-      candidates.groupMap(_(1))(_(0)).partition(_(1).size > 1)
+      })
+      candidates.groupMap(_.w)(_.v).partition(_(1).size > 1)
 
-    val mergeableEdges: Cut = mergeable.flatMap((y, sts) => sts.toList.map((_, y))).toSet
-    val replaceableEdges: Cut = replaceable.toSeq.flatMap((y, st1s) => st1s.map((_, y))).toSet
+    val mergeableEdges: Cut = mergeable.flatMap((y, sts) => sts.toList.map(Edge(_, y))).toSet
+    val replaceableEdges: Cut = replaceable.toSeq.flatMap((y, st1s) => st1s.map(Edge(_, y))).toSet
     // println(s"mergeableEdges: ${mergeableEdges.show(using w)}")
     // println(s"replaceableEdges: ${replaceableEdges.show(using w)}")
 
-    val prunedKeys = (mergeableEdges ++ replaceableEdges + ((s, t))).flatMap(e => Set(e, e.swap))
+    val prunedKeys = (mergeableEdges ++ replaceableEdges + (Edge(s, t))).flatMap(e => Set(e, e.swap))
 
     val prunedW = w -- prunedKeys
     val prunedEdges = E -- prunedKeys
 
-    val st = s ++ t
+    val st = vs(s) ++ vs(t)
     val (mergedEdges, mergedWeights) = mergeable.toSet.map((y, st1s) =>
-      val e1 = st -> y
+      val e1 = Edge(st.id, y)
       // val weights = st1s.map(st1 => w((st1, y)))
       // println(s"new merged edge: ${e1.show}, weights: ${weights}, from: ${st1s.map(_.show)}")
-      (e1, e1 -> st1s.toSeq.map(st1 => w((st1, y))).sum)
+      (e1, e1 -> st1s.toSeq.map(st1 => w(Edge(st1, y))).sum)
     ).unzip
 
-    val (replacedEdges, replacedWeights) = replaceableEdges.map((st1, y) =>
-      val e = st1 -> y
-      val e1 = (st, y)
+    val (replacedEdges, replacedWeights) = replaceableEdges.map({case Edge(st1, y) =>
+      val e = Edge(st1, y)
+      val e1 = Edge(st.id, y)
       (e1, e1 -> w(e))
-    ).unzip
+    }).unzip
 
     val E1 = prunedEdges ++ (mergedEdges ++ replacedEdges).flatMap(e => Set(e, e.swap))
     val w1 = prunedW ++ (mergedWeights ++ replacedWeights).flatMap(e => Set(e, (e(0).swap, e(1))))
+    val V1 = v1.view.map(vs).toSet + st
     // println(s"mergedEdges: ${mergedEdges.show(using w1)}")
     // println(s"replacedEdges: ${replacedEdges.show(using w1)}")
-    (Graph(V1 + st, E1), w1)
+    (Graph(V1, E1), w1)
 
-def minimumCutPhase(G: Graph, w: Weight, a: Vertex) =
-  var A = Set(a)
-  var U = G.V - a
-  var S = List(a)
-  var (m, n) = G.E.partition((a1, _) => a1 == a)
-  // var i = 0
-  while A != G.V do
-    // i += 1
-    // if i % 10 == 0 then
-    //   println(s"phase: $i")
-    // add to A the most tightly connected vertex
-    // store the cut-of-the-phase and shrink G by merging the two vertices added last
-    val z = G.mostTightlyConnectedVertex(A, U, m, w)
-    A += z
-    U -= z
-    val (m1, n1) = n.partition((z1, _) => z1 == z)
-    m ++= m1
-    n = n1
-    S ::= z
-  val t :: s :: _ = S: @unchecked
+inline def merge[A, B](onto: Map[A, B], m: IterableOnce[(A, B)], inline combine: (B, B) => B): Map[A, B] =
+  m.foldLeft(onto): (m, kv) =>
+    val (z, w0) = kv
+    m.updatedWith(z):
+      case None => Some(w0)
+      case Some(w1) => Some(combine(w1, w0))
+
+def cutWeight(cut: Cut, w: Weight): Long =
+  cut.foldLeft(0L)(_ + w(_))
+
+def connections(z: Id, explore: Vertices, w: Weight, alist: Map[Id, Map[Id, Set[Edge]]]) =
+  alist(z).view.filter((y, _) => explore(y)).mapValues(cutWeight(_, w))
+
+def mostTightlyConnectedVertex(explore: Vertices, frontier: Map[Id, Long]): Id =
+  explore.maxBy(y => frontier.getOrElse(y, 0L))
+
+def minimumCutPhase(G: Graph, w: Weight, a: Id) =
+  val alist = G.E.groupBy(_.v).view.mapValues(_.groupBy(_.w)).toMap
+  var A = List(a)
+  var explore = G.v - a
+  var frontier = connections(a, explore, w, alist).toMap
+  while explore.nonEmpty do
+    val z = mostTightlyConnectedVertex(explore, frontier)
+    A ::= z
+    explore -= z
+    frontier = merge(frontier, connections(z, explore, w, alist), _ + _)
+  val t :: s :: _ = A: @unchecked
   val (g, w1) = G.shrinkGraph(s, t, w)
   (g, w1, G.cutOfThePhase(t))
 
-def minimumCut(G: Graph, w: Weight, a: Vertex) =
+def minimumCut(G: Graph, w: Weight, a: Id) =
   var g = G
   var w1 = w
   var i = 0
-  var minCut = (cut = Set.empty[Edge], out = Set.empty[String], in = Set.empty[String])
+  var minCut = (graph = G, cut = Set.empty[Edge], out = Set.empty[String], in = Set.empty[String])
   var minCutWeight = Long.MaxValue
   var minCutPhase = 0
   while g.V.size > 1 do
+    if i % 100 == 0 then
+      println(s"phase: $i, g: ${g.V.size} vertices, ${g.E.size} edges")
     i += 1
-    // if i % 100 == 0 then
-    println(s"phase: $i, g: ${g.V.size} vertices, ${g.E.size} edges")
     val (g1, w2, cutOfThePhase) = minimumCutPhase(g, w1, a)
     // println(s"new cut: ${cutOfThePhase.cut.show(using w1)}")//", weight: ${w2}, g: ${g1}")
     // println(s"weights:")
     // w2.foreach((k, v) => println(s"${k.show}: ${v}"))
-    val weight = G.cutWeight(cutOfThePhase.cut, w1)
+    val weight = cutWeight(cutOfThePhase.cut, w1)
     if weight < minCutWeight then
       minCut = cutOfThePhase
       minCutWeight = weight
@@ -164,6 +169,7 @@ def minimumCut(G: Graph, w: Weight, a: Vertex) =
   (minCut, minCutWeight, minCutPhase)
 
 def part1(input: String): Long =
+  val start = System.currentTimeMillis()
   val raw = parse(input)
   // val all = raw.flatMap((k, vs) => Set(k) ++ vs).toSet
   // val grouped = groups(raw, Seq.empty)
@@ -181,21 +187,23 @@ def part1(input: String): Long =
   println(s"graph ${G.V.size} vertices, ${G.E.size} edges")
   // println(s"weights:")
   // w.foreach((k, v) => println(s"${k.show}: ${v}"))
-  val (minCut, weight, i) = minimumCut(G, w, G.V.head)
-  println(s"minCut: $weight at idx(${i}) of ${minCut.cut.showRaw}")
+  val (minCut, weight, i) = minimumCut(G, w, G.V.head.id)
+  val end = System.currentTimeMillis()
+  println(s"minCut: $weight at idx(${i}) of ${minCut.cut.showRaw(using minCut.graph)}")
   println(s"in: ${minCut.in}, out: ${minCut.out}")
+  println(s"took ${end - start} ms")
   minCut.in.size * minCut.out.size
 
 def part2(input: String): Long =
   0
 
 extension (v: Vertex) def show: String = v.nodes.mkString("{", ",", "}")
-extension (e: Edge) def show: String = s"${e(0).show}->${e(1).show}"
-extension (c: Cut) def show(using w: Weight): String =
+extension (e: Edge) def show(using g: Graph): String = s"${g.vs(e.v).show}->${g.vs(e.w).show}"
+extension (c: Cut) def show(using w: Weight, g: Graph): String =
   c.map(e => s"${e.show}:${w(e)}").mkString("[", ",", "]")
 extension (c: Set[Vertex]) def show: String =
   c.map(e => s"${e.show}").mkString("[", ",", "]")
-extension (c: Cut) def showRaw: String =
+extension (c: Cut) def showRaw(using g: Graph): String =
   c.map(e => s"${e.show}").mkString("[", ",", "]")
 // extension (c: Weight) def show: String =
 //   c.map((k, v) => s"${k.show}:$v").mkString("[", ",", "]")
