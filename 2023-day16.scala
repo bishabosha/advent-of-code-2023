@@ -39,7 +39,6 @@ import Direction.*
 
 val upTo = collection.mutable.HashMap.empty[(x: Int, y: Int, t1: Int, dir: Direction), Set[Coord]]
 
-
 def covered(w: World, ns: Nodes, x: Int, y: Int, dir: Direction): Set[Coord] =
   val width = w(0).size
   val height = w.size
