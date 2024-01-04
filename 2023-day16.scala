@@ -30,14 +30,7 @@ def scan(w: World): Nodes =
 def part1(input: String): Long =
   val world = parse(input)
   val nodes = scan(world)
-  val active = covered(world, nodes, 0, 0, Right)
-  // val show =
-  //   for (row, y) <- world.zipWithIndex yield
-  //     for case (elem: Elem, x) <- row.zipWithIndex
-  //     yield
-  //       if active.contains((elem, x, y)) then '#' else '.'
-  // show.foreach(row => println(row.mkString))
-  active.size
+  covered(world, nodes, 0, 0, Right).size
 
 enum Direction:
   case Up, Down, Left, Right
@@ -45,8 +38,6 @@ enum Direction:
 import Direction.*
 
 val upTo = collection.mutable.HashMap.empty[(x: Int, y: Int, t1: Int, dir: Direction), Set[Coord]]
-
-// val subcache = collection.mutable.Map.empty[(Int, Int, Direction), Set[Coord]]
 
 def covered(w: World, ns: Nodes, x: Int, y: Int, dir: Direction): Set[Coord] =
   val width = w(0).size
@@ -61,7 +52,7 @@ def covered(w: World, ns: Nodes, x: Int, y: Int, dir: Direction): Set[Coord] =
         case Right => (x to t1).map[Coord](x => (w(y)(x), x, y)).toSet
     })
 
-  def inner(x: Int, y: Int, dir: Direction): Set[Coord] =
+  def loop(x: Int, y: Int, dir: Direction): Set[Coord] =
     if x < 0 || x >= width || y < 0 || y >= height then Set.empty
     else dir match
       case Up =>
@@ -132,11 +123,8 @@ def covered(w: World, ns: Nodes, x: Int, y: Int, dir: Direction): Set[Coord] =
             base ++ extra
           case _ =>  // continues from x to end or row
             to(x, y, width - 1, dir)
-  end inner
-  def loop(x: Int, y: Int, dir: Direction): Set[Coord] =
-    inner(x, y, dir)
-    // subcache.getOrElseUpdate((x, y, dir), inner(x, y, dir))
-  inner(x, y, dir)
+  end loop
+  loop(x, y, dir)
 
 def part2(input: String): Long =
   val world = parse(input)
@@ -149,16 +137,9 @@ def part2(input: String): Long =
   val bottom = (0 until width).map(x => (x, height - 1, Up))
   val left = (0 until height).map(y => (0, y, Right))
 
-  val active = (top ++ right ++ bottom ++ left).map((x, y, dir) =>
+  (top ++ right ++ bottom ++ left).map((x, y, dir) =>
     covered(world, nodes, x, y, dir).size
   ).max
-  // val show =
-  //   for (row, y) <- world.zipWithIndex yield
-  //     for case (elem: Elem, x) <- row.zipWithIndex
-  //     yield
-  //       if active.contains((elem, x, y)) then '#' else '.'
-  // show.foreach(row => println(row.mkString))
-  active
 
 import challenges.*
 
